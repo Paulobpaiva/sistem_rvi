@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teste Geocoding</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input, button {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background: #f9f9f9;
+        }
+        .error {
+            background: #f8d7da;
+            border-color: #f5c6cb;
+            color: #721c24;
+        }
+        .success {
+            background: #d4edda;
+            border-color: #c3e6cb;
+            color: #155724;
+        }
+    </style>
+</head>
+<body>
+    <h1>Teste de Geocoding</h1>
+    
+    <div class="form-group">
+        <label for="endereco">Endereço para testar:</label>
+        <input type="text" id="endereco" placeholder="Ex: Rua das Flores, 123, Recife, PE">
+    </div>
+    
+    <button onclick="testarGeocoding()">Testar Geocoding</button>
+    
+    <div id="resultado" class="result" style="display: none;"></div>
+
+    <script>
+        async function geocodeAddress(address) {
+            try {
+                console.log('🌍 Geocodificando endereço:', address);
+                
+                // Limpar e formatar o endereço
+                let cleanAddress = address.trim();
+                
+                // Adicionar contexto brasileiro se não estiver presente
+                if (!cleanAddress.toLowerCase().includes('brasil') && !cleanAddress.toLowerCase().includes('br')) {
+                    cleanAddress += ', Brasil';
+                }
+                
+                console.log('🔍 Endereço formatado:', cleanAddress);
+                
+                // Tentar com Nominatim primeiro
+                try {
+                    const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(cleanAddress)}&limit=1&countrycodes=br&addressdetails=1`);
+                    const data = await response.json();
+                    console.log('📨 Resposta Nominatim:', data);
+                    
+                    if (data.length > 0) {
+                        const coords = [parseFloat(data[0].lat), parseFloat(data[0].lon)];
+                        console.log('✅ Coordenadas encontradas (Nominatim):', coords);
+                        return coords;
+                    }
+                } catch (nominatimError) {
+                    console.log('❌ Erro no Nominatim:', nominatimError);
+                }
+                
+                // Se não encontrou, tentar sem countrycodes
+                try {
+                    const response2 = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(cleanAddress)}&limit=1`);
+                    const data2 = await response2.json();
+                    console.log('📨 Resposta Nominatim (sem countrycodes):', data2);
+                    
+                    if (data2.length > 0) {
+                        const coords = [parseFloat(data2[0].lat), parseFloat(data2[0].lon)];
+                        console.log('✅ Coordenadas encontradas (Nominatim sem filtro):', coords);
+                        return coords;
+                    }
+                } catch (nominatimError2) {
+                    console.log('❌ Erro no Nominatim (sem filtro):', nominatimError2);
+                }
+                
+                // Se ainda não encontrou, tentar com apenas a cidade/estado
+                const addressParts = cleanAddress.split(',');
+                if (addressParts.length > 2) {
+                    const cityState = addressParts.slice(-2).join(',');
+                    console.log('🔄 Tentando com cidade/estado:', cityState);
+                    
+                    try {
+                        const response3 = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(cityState + ', Brasil')}&limit=1`);
+                        const data3 = await response3.json();
+                        console.log('📨 Resposta Nominatim (cidade/estado):', data3);
+                        
+                        if (data3.length > 0) {
+                            const coords = [parseFloat(data3[0].lat), parseFloat(data3[0].lon)];
+                            console.log('✅ Coordenadas encontradas (cidade/estado):', coords);
+                            return coords;
+                        }
+                    } catch (cityError) {
+                        console.log('❌ Erro ao buscar cidade/estado:', cityError);
+                    }
+                }
+                
+                console.log('❌ Nenhuma coordenada encontrada para:', address);
+                return null;
+            } catch (error) {
+                console.error('💥 Erro ao geocodificar:', error);
+                return null;
+            }
+        }
+        
+        async function testarGeocoding() {
+            const endereco = document.getElementById('endereco').value;
+            const resultado = document.getElementById('resultado');
+            
+            if (!endereco.trim()) {
+                resultado.innerHTML = '<strong>Erro:</strong> Digite um endereço para testar.';
+                resultado.className = 'result error';
+                resultado.style.display = 'block';
+                return;
+            }
+            
+            resultado.innerHTML = '<strong>Testando...</strong> Aguarde...';
+            resultado.className = 'result';
+            resultado.style.display = 'block';
+            
+            try {
+                const coords = await geocodeAddress(endereco);
+                
+                if (coords) {
+                    resultado.innerHTML = `
+                        <strong>✅ Sucesso!</strong><br>
+                        <strong>Endereço:</strong> ${endereco}<br>
+                        <strong>Latitude:</strong> ${coords[0]}<br>
+                        <strong>Longitude:</strong> ${coords[1]}<br>
+                        <strong>Coordenadas:</strong> [${coords[0]}, ${coords[1]}]
+                    `;
+                    resultado.className = 'result success';
+                } else {
+                    resultado.innerHTML = `
+                        <strong>❌ Falha!</strong><br>
+                        <strong>Endereço:</strong> ${endereco}<br>
+                        Não foi possível encontrar coordenadas para este endereço.
+                    `;
+                    resultado.className = 'result error';
+                }
+            } catch (error) {
+                resultado.innerHTML = `
+                    <strong>💥 Erro!</strong><br>
+                    <strong>Endereço:</strong> ${endereco}<br>
+                    <strong>Erro:</strong> ${error.message}
+                `;
+                resultado.className = 'result error';
+            }
+        }
+        
+        // Permitir testar com Enter
+        document.getElementById('endereco').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                testarGeocoding();
+            }
+        });
+    </script>
+</body>
+</html> 

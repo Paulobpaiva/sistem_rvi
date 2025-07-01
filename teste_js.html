@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teste JavaScript</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        #map {
+            height: 400px;
+            width: 100%;
+            border: 1px solid #ccc;
+        }
+        .container {
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input, select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Teste do Sistema de Solicitação</h1>
+        
+        <div class="form-group">
+            <label for="cep">CEP:</label>
+            <input type="text" id="cep" placeholder="00000-000">
+        </div>
+        
+        <div class="form-group">
+            <label for="destino_endereco">Endereço:</label>
+            <input type="text" id="destino_endereco" placeholder="Digite o endereço">
+        </div>
+        
+        <div class="form-group">
+            <label for="hora_saida">Hora de Saída:</label>
+            <select id="hora_saida">
+                <option value="">Selecione um horário</option>
+                <option value="08:00">08:00</option>
+                <option value="09:00">09:00</option>
+                <option value="10:00">10:00</option>
+                <option value="11:00">11:00</option>
+                <option value="12:00">12:00</option>
+                <option value="13:00">13:00</option>
+                <option value="14:00">14:00</option>
+                <option value="15:00">15:00</option>
+                <option value="16:00">16:00</option>
+                <option value="17:00">17:00</option>
+            </select>
+        </div>
+        
+        <div class="form-group">
+            <label for="hora_retorno">Hora de Retorno:</label>
+            <input type="text" id="hora_retorno" readonly>
+        </div>
+        
+        <button onclick="testarCEP()">Testar CEP</button>
+        <button onclick="testarEndereco()">Testar Endereço</button>
+        
+        <div id="map"></div>
+        
+        <div id="route-info" style="display: none;">
+            <h6>Informações da Rota</h6>
+            <div id="route-details"></div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // Aguardar o DOM carregar
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('=== TESTE DO SISTEMA CARREGADO ===');
+            
+            // Verificar se os elementos existem
+            const cepField = document.getElementById('cep');
+            const enderecoField = document.getElementById('destino_endereco');
+            const horaSaidaField = document.getElementById('hora_saida');
+            const horaRetornoField = document.getElementById('hora_retorno');
+            const mapElement = document.getElementById('map');
+            
+            console.log('Elementos encontrados:', {
+                cep: !!cepField,
+                endereco: !!enderecoField,
+                horaSaida: !!horaSaidaField,
+                horaRetorno: !!horaRetornoField,
+                map: !!mapElement
+            });
+            
+            if (!mapElement) {
+                console.error('Elemento do mapa não encontrado!');
+                return;
+            }
+            
+            // Endereço da empresa (Instituto Aggeu Magalhães)
+            const empresaAddress = "Instituto Aggeu Magalhães - Fundação Oswaldo Cruz, Universidade Federal de Pernambuco - Campus da, Av. Prof. Moraes Rego, s/n - Cidade Universitária, Recife - PE, 50740-465";
+            
+            // Coordenadas aproximadas da empresa (Recife, PE)
+            const empresaCoords = [-8.0476, -34.8770];
+            
+            console.log('Inicializando mapa...');
+            
+            // Inicializar mapa
+            const map = L.map('map').setView(empresaCoords, 13);
+            
+            // Adicionar camada de tiles do OpenStreetMap
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors'
+            }).addTo(map);
+            
+            // Marcador da empresa
+            const empresaMarker = L.marker(empresaCoords).addTo(map);
+            empresaMarker.bindPopup('<strong>Instituto Aggeu Magalhães</strong><br>Ponto de partida').openPopup();
+            
+            let destinoMarker = null;
+            let routeLayer = null;
+            
+            console.log('Mapa inicializado com sucesso!');
+            
+            // Função para buscar endereço por CEP
+            async function buscarCep(cep) {
+                try {
+                    console.log('🔍 Buscando CEP:', cep);
+                    // Remover caracteres não numéricos
+                    cep = cep.replace(/\D/g, '');
+                    
+                    if (cep.length !== 8) {
+                        console.log('❌ CEP inválido:', cep);
+                        return null;
+                    }
+                    
+                    console.log('📡 Fazendo requisição para ViaCEP...');
+                    const response = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+                    const data = await response.json();
+                    console.log('📨 Resposta ViaCEP:', data);
+                    
+                    if (!data.erro && data.logradouro) {
+                        const endereco = `${data.logradouro}, ${data.bairro}, ${data.localidade} - ${data.uf}`;
+                        console.log('✅ Endereço encontrado:', endereco);
+                        return endereco;
+                    } else {
+                        console.log('❌ CEP não encontrado ou erro na resposta');
+                        return null;
+                    }
+                } catch (error) {
+                    console.error('💥 Erro ao buscar CEP:', error);
+                    return null;
+                }
+            }
+            
+            // Função para geocodificar endereço
+            async function geocodeAddress(address) {
+                try {
+                    console.log('🌍 Geocodificando endereço:', address);
+                    const searchQuery = address + ', Brasil';
+                    console.log('🔍 Query de busca:', searchQuery);
+                    
+                    const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}&limit=1`);
+                    const data = await response.json();
+                    console.log('📨 Resposta Nominatim:', data);
+                    
+                    if (data.length > 0) {
+                        const coords = [parseFloat(data[0].lat), parseFloat(data[0].lon)];
+                        console.log('✅ Coordenadas encontradas:', coords);
+                        return coords;
+                    } else {
+                        console.log('❌ Nenhuma coordenada encontrada para:', address);
+                        return null;
+                    }
+                } catch (error) {
+                    console.error('💥 Erro ao geocodificar:', error);
+                    return null;
+                }
+            }
+            
+            // Função para calcular rota
+            async function calculateRoute(destinoCoords) {
+                try {
+                    console.log('🛣️ Calculando rota para:', destinoCoords);
+                    const url = `https://router.project-osrm.org/route/v1/driving/${empresaCoords[1]},${empresaCoords[0]};${destinoCoords[1]},${destinoCoords[0]}?overview=full&geometries=geojson`;
+                    console.log('📡 URL da requisição:', url);
+                    
+                    const response = await fetch(url);
+                    const data = await response.json();
+                    console.log('📨 Resposta OSRM:', data);
+                    
+                    if (data.routes && data.routes.length > 0) {
+                        const route = data.routes[0];
+                        console.log('✅ Rota encontrada:', route);
+                        
+                        // Remover rota anterior
+                        if (routeLayer) {
+                            map.removeLayer(routeLayer);
+                        }
+                        
+                        // Adicionar nova rota
+                        routeLayer = L.geoJSON(route.geometry, {
+                            style: {
+                                color: '#007bff',
+                                weight: 4,
+                                opacity: 0.7
+                            }
+                        }).addTo(map);
+                        
+                        // Ajustar view para mostrar toda a rota
+                        map.fitBounds(routeLayer.getBounds());
+                        
+                        // Mostrar informações da rota
+                        const distancia = (route.distance / 1000).toFixed(1);
+                        const duracao = Math.round(route.duration / 60);
+                        
+                        const routeDetails = document.getElementById('route-details');
+                        const routeInfo = document.getElementById('route-info');
+                        
+                        if (routeDetails && routeInfo) {
+                            routeDetails.innerHTML = `
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <strong>Distância:</strong> ${distancia} km
+                                    </div>
+                                    <div class="col-md-6">
+                                        <strong>Tempo estimado:</strong> ${duracao} minutos
+                                    </div>
+                                </div>
+                            `;
+                            routeInfo.style.display = 'block';
+                            console.log('✅ Informações da rota exibidas!');
+                        } else {
+                            console.log('❌ Elementos de rota não encontrados');
+                        }
+                    } else {
+                        console.log('❌ Nenhuma rota encontrada');
+                    }
+                } catch (error) {
+                    console.error('💥 Erro ao calcular rota:', error);
+                }
+            }
+            
+            // Função para calcular horário de retorno (8 horas depois)
+            function calcularHorarioRetorno(horaSaida) {
+                console.log('⏰ Calculando horário de retorno para:', horaSaida);
+                if (!horaSaida) {
+                    console.log('❌ Hora de saída não fornecida');
+                    return;
+                }
+                
+                const [hora, minuto] = horaSaida.split(':').map(Number);
+                console.log('📊 Hora:', hora, 'Minuto:', minuto);
+                
+                // Calcular 8 horas depois
+                let novaHora = hora + 8;
+                let novaMinuto = minuto;
+                
+                // Ajustar se passar de 24 horas
+                if (novaHora >= 24) {
+                    novaHora = novaHora - 24;
+                }
+                
+                const horaRetorno = novaHora.toString().padStart(2, '0');
+                const minutoRetorno = novaMinuto.toString().padStart(2, '0');
+                const horarioCompleto = `${horaRetorno}:${minutoRetorno}`;
+                
+                console.log('✅ Horário de retorno calculado:', horarioCompleto);
+                
+                if (horaRetornoField) {
+                    horaRetornoField.value = horarioCompleto;
+                    console.log('✅ Campo de retorno atualizado!');
+                } else {
+                    console.log('❌ Campo de retorno não encontrado');
+                }
+            }
+            
+            // Função para processar endereço e calcular rota
+            async function processarEndereco(endereco) {
+                if (!endereco.trim()) {
+                    console.log('❌ Endereço vazio');
+                    return;
+                }
+                
+                console.log('🔄 Processando endereço:', endereco);
+                
+                // Remover marcador anterior
+                if (destinoMarker) {
+                    map.removeLayer(destinoMarker);
+                }
+                
+                // Geocodificar endereço
+                const coords = await geocodeAddress(endereco);
+                
+                if (coords) {
+                    // Adicionar marcador de destino
+                    destinoMarker = L.marker(coords).addTo(map);
+                    destinoMarker.bindPopup('<strong>Destino</strong><br>' + endereco).openPopup();
+                    console.log('✅ Marcador de destino adicionado');
+                    
+                    // Calcular rota
+                    await calculateRoute(coords);
+                } else {
+                    console.log('❌ Endereço não encontrado:', endereco);
+                    alert('Não foi possível encontrar o endereço. Verifique se está correto.');
+                }
+            }
+            
+            // Event listener para mudança no CEP
+            if (cepField) {
+                console.log('🔗 Configurando evento para CEP');
+                cepField.addEventListener('blur', async function() {
+                    const cep = this.value.trim();
+                    console.log('📝 CEP digitado:', cep);
+                    
+                    if (cep) {
+                        const endereco = await buscarCep(cep);
+                        
+                        if (endereco) {
+                            if (enderecoField) {
+                                enderecoField.value = endereco;
+                                console.log('✅ Endereço preenchido automaticamente');
+                            }
+                            await processarEndereco(endereco);
+                        } else {
+                            alert('CEP não encontrado. Verifique se está correto.');
+                        }
+                    }
+                });
+                
+                // Máscara para CEP
+                cepField.addEventListener('input', function() {
+                    let value = this.value.replace(/\D/g, '');
+                    if (value.length > 5) {
+                        value = value.substring(0, 5) + '-' + value.substring(5, 8);
+                    }
+                    this.value = value;
+                });
+            }
+            
+            // Event listener para mudança no campo de endereço
+            if (enderecoField) {
+                console.log('🔗 Configurando evento para endereço');
+                enderecoField.addEventListener('blur', async function() {
+                    const endereco = this.value.trim();
+                    console.log('📝 Endereço digitado:', endereco);
+                    if (endereco) {
+                        await processarEndereco(endereco);
+                    }
+                });
+            }
+            
+            // Event listener para mudança no horário de saída
+            if (horaSaidaField) {
+                console.log('🔗 Configurando evento para hora de saída');
+                horaSaidaField.addEventListener('change', function() {
+                    console.log('⏰ Horário de saída selecionado:', this.value);
+                    calcularHorarioRetorno(this.value);
+                });
+            }
+            
+            console.log('✅ Todos os event listeners configurados!');
+            console.log('=== SISTEMA PRONTO PARA USO ===');
+            
+            // Funções globais para teste
+            window.testarCEP = async function() {
+                const cep = document.getElementById('cep').value;
+                if (cep) {
+                    const endereco = await buscarCep(cep);
+                    if (endereco) {
+                        document.getElementById('destino_endereco').value = endereco;
+                        await processarEndereco(endereco);
+                    } else {
+                        alert('CEP não encontrado!');
+                    }
+                } else {
+                    alert('Digite um CEP primeiro!');
+                }
+            };
+            
+            window.testarEndereco = async function() {
+                const endereco = document.getElementById('destino_endereco').value;
+                if (endereco) {
+                    await processarEndereco(endereco);
+                } else {
+                    alert('Digite um endereço primeiro!');
+                }
+            };
+        });
+    </script>
+</body>
+</html> 

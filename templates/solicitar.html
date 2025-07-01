@@ -1,0 +1,646 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ titulo }}{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+    #map {
+        height: 400px;
+        width: 100%;
+        border-radius: 8px;
+        margin-bottom: 20px;
+    }
+    .route-info {
+        background-color: #f8f9fa;
+        padding: 15px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+    }
+    .route-info h6 {
+        color: #495057;
+        margin-bottom: 10px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-12 col-lg-10">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h2 class="text-center mb-0">{{ titulo }}</h2>
+                </div>
+                <div class="card-body">
+                    <form method="post" novalidate>
+                        {% csrf_token %}
+                        
+                        <!-- Informações do Solicitante -->
+                        <div class="row mb-4">
+                            <div class="col-12">
+                                <h4 class="border-bottom pb-2">Informações do Solicitante</h4>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="{{ form.nome_solicitante.id_for_label }}" class="form-label">
+                                    <strong>Nome do Solicitante:</strong>
+                                </label>
+                                {{ form.nome_solicitante }}
+                                {% if form.nome_solicitante.errors %}
+                                    <div class="text-danger">{{ form.nome_solicitante.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-6">
+                                <label for="{{ form.departamento.id_for_label }}" class="form-label">
+                                    <strong>Departamento:</strong>
+                                </label>
+                                {{ form.departamento }}
+                                {% if form.departamento.errors %}
+                                    <div class="text-danger">{{ form.departamento.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div class="row mb-4">
+                            <div class="col-md-6">
+                                <label for="{{ form.ramal.id_for_label }}" class="form-label">
+                                    <strong>Ramal:</strong>
+                                </label>
+                                {{ form.ramal }}
+                                {% if form.ramal.errors %}
+                                    <div class="text-danger">{{ form.ramal.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-6">
+                                <label for="{{ form.chefia_imediata.id_for_label }}" class="form-label">
+                                    <strong>Chefia imediata:</strong>
+                                </label>
+                                {{ form.chefia_imediata }}
+                                {% if form.chefia_imediata.errors %}
+                                    <div class="text-danger">{{ form.chefia_imediata.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <!-- Informações da Solicitação -->
+                        <div class="row mb-4">
+                            <div class="col-12">
+                                <h4 class="border-bottom pb-2">Informações da Solicitação</h4>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="{{ form.finalidade.id_for_label }}" class="form-label">
+                                    <strong>Finalidade da solicitação:</strong>
+                                </label>
+                                {{ form.finalidade }}
+                                {% if form.finalidade.errors %}
+                                    <div class="text-danger">{{ form.finalidade.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-6">
+                                <label for="{{ form.tipo_veiculo.id_for_label }}" class="form-label">
+                                    <strong>Tipo de Veículo:</strong>
+                                </label>
+                                {{ form.tipo_veiculo }}
+                                {% if form.tipo_veiculo.errors %}
+                                    <div class="text-danger">{{ form.tipo_veiculo.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <!-- Destino e Mapa -->
+                        <div class="row mb-4">
+                            <div class="col-12">
+                                <h4 class="border-bottom pb-2">Destino e Rota</h4>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="{{ form.cep.id_for_label }}" class="form-label">
+                                    <strong>CEP:</strong>
+                                </label>
+                                {{ form.cep }}
+                                {% if form.cep.errors %}
+                                    <div class="text-danger">{{ form.cep.errors.0 }}</div>
+                                {% endif %}
+                                <small class="form-text text-muted">
+                                    Digite o CEP para carregar o endereço automaticamente (opcional)
+                                </small>
+                            </div>
+                            <div class="col-md-8">
+                                <label for="{{ form.destino_endereco.id_for_label }}" class="form-label">
+                                    <strong>Destino/Endereço:</strong>
+                                </label>
+                                {{ form.destino_endereco }}
+                                {% if form.destino_endereco.errors %}
+                                    <div class="text-danger">{{ form.destino_endereco.errors.0 }}</div>
+                                {% endif %}
+                                <small class="form-text text-muted">
+                                    Digite o endereço completo ou use o CEP para autopreenchimento
+                                </small>
+                            </div>
+                            <div class="col-12 mt-3">
+                                <div id="map"></div>
+                                <div class="route-info" id="route-info" style="display: none;">
+                                    <h6><i class="fas fa-route"></i> Informações da Rota</h6>
+                                    <div id="route-details"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row mb-4">
+                            <div class="col-12">
+                                <label for="{{ form.descricao_servico.id_for_label }}" class="form-label">
+                                    <strong>Descrição do serviço:</strong>
+                                </label>
+                                {{ form.descricao_servico }}
+                                {% if form.descricao_servico.errors %}
+                                    <div class="text-danger">{{ form.descricao_servico.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <!-- Data e Horários -->
+                        <div class="row mb-4">
+                            <div class="col-12">
+                                <h4 class="border-bottom pb-2">Data e Horários</h4>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="{{ form.data_realizacao.id_for_label }}" class="form-label">
+                                    <strong>Data para realização do serviço:</strong>
+                                </label>
+                                {{ form.data_realizacao }}
+                                {% if form.data_realizacao.errors %}
+                                    <div class="text-danger">{{ form.data_realizacao.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-4">
+                                <label for="{{ form.hora_saida.id_for_label }}" class="form-label">
+                                    <strong>Hora saída:</strong>
+                                </label>
+                                {{ form.hora_saida }}
+                                {% if form.hora_saida.errors %}
+                                    <div class="text-danger">{{ form.hora_saida.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-4">
+                                <label for="{{ form.hora_retorno.id_for_label }}" class="form-label">
+                                    <strong>Hora retorno (Previsão):</strong>
+                                </label>
+                                {{ form.hora_retorno }}
+                                {% if form.hora_retorno.errors %}
+                                    <div class="text-danger">{{ form.hora_retorno.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <!-- Observações -->
+                        <div class="row mb-4">
+                            <div class="col-12">
+                                <label for="{{ form.observacoes.id_for_label }}" class="form-label">
+                                    <strong>Observações:</strong>
+                                </label>
+                                {{ form.observacoes }}
+                                {% if form.observacoes.errors %}
+                                    <div class="text-danger">{{ form.observacoes.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <!-- Mensagens de erro do formulário -->
+                        {% if form.non_field_errors %}
+                            <div class="alert alert-danger">
+                                {% for error in form.non_field_errors %}
+                                    {{ error }}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+
+                        <!-- Botões -->
+                        <div class="d-flex justify-content-end gap-2">
+                            <a href="{% url 'solicitacoes:list' %}" class="btn btn-secondary">
+                                <i class="fas fa-times"></i> Cancelar
+                            </a>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-paper-plane"></i> Enviar Solicitação
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+    // Aguardar o DOM carregar
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('=== SISTEMA DE SOLICITAÇÃO CARREGADO ===');
+        
+        // Verificar se os elementos existem
+        const cepField = document.getElementById('cep');
+        const enderecoField = document.getElementById('destino_endereco');
+        const horaSaidaField = document.getElementById('hora_saida');
+        const horaRetornoField = document.getElementById('hora_retorno');
+        const mapElement = document.getElementById('map');
+        
+        console.log('Elementos encontrados:', {
+            cep: !!cepField,
+            endereco: !!enderecoField,
+            horaSaida: !!horaSaidaField,
+            horaRetorno: !!horaRetornoField,
+            map: !!mapElement
+        });
+        
+        if (!mapElement) {
+            console.error('Elemento do mapa não encontrado!');
+            return;
+        }
+        
+        // Endereço da empresa (Instituto Aggeu Magalhães)
+        const empresaAddress = "Instituto Aggeu Magalhães - Fundação Oswaldo Cruz, Universidade Federal de Pernambuco - Campus da, Av. Prof. Moraes Rego, s/n - Cidade Universitária, Recife - PE, 50740-465";
+        
+        // Coordenadas aproximadas da empresa (Recife, PE)
+        const empresaCoords = [-8.0476, -34.8770];
+        
+        console.log('Inicializando mapa...');
+        
+        // Inicializar mapa
+        const map = L.map('map').setView(empresaCoords, 13);
+        
+        // Adicionar camada de tiles do OpenStreetMap
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+        
+        // Marcador da empresa
+        const empresaMarker = L.marker(empresaCoords).addTo(map);
+        empresaMarker.bindPopup('<strong>Instituto Aggeu Magalhães</strong><br>Ponto de partida').openPopup();
+        
+        let destinoMarker = null;
+        let routeLayer = null;
+        
+        console.log('Mapa inicializado com sucesso!');
+        
+        // Função para buscar endereço por CEP
+        async function buscarCep(cep) {
+            try {
+                console.log('🔍 Buscando CEP:', cep);
+                // Remover caracteres não numéricos (incluindo hífen)
+                cep = cep.replace(/\D/g, '');
+                
+                console.log('🔍 CEP limpo:', cep);
+                
+                if (cep.length !== 8) {
+                    console.log('❌ CEP inválido:', cep);
+                    return null;
+                }
+                
+                console.log('📡 Fazendo requisição para ViaCEP...');
+                const url = `https://viacep.com.br/ws/${cep}/json/`;
+                console.log('📡 URL da requisição:', url);
+                
+                const response = await fetch(url);
+                const data = await response.json();
+                console.log('📨 Resposta ViaCEP:', data);
+                
+                // Verificar se há erro na resposta
+                if (data.erro) {
+                    console.log('❌ CEP não encontrado na API');
+                    return null;
+                }
+                
+                // Verificar se tem logradouro
+                if (data.logradouro && data.logradouro.trim() !== '') {
+                    const endereco = `${data.logradouro}, ${data.bairro}, ${data.localidade} - ${data.uf}`;
+                    console.log('✅ Endereço encontrado:', endereco);
+                    return endereco;
+                } else {
+                    console.log('❌ CEP encontrado mas sem logradouro:', data);
+                    return null;
+                }
+            } catch (error) {
+                console.error('💥 Erro ao buscar CEP:', error);
+                return null;
+            }
+        }
+        
+        // Função para geocodificar endereço
+        async function geocodeAddress(address) {
+            try {
+                console.log('🌍 Geocodificando endereço:', address);
+                
+                // Limpar e formatar o endereço
+                let cleanAddress = address.trim();
+                
+                // Adicionar contexto brasileiro se não estiver presente
+                if (!cleanAddress.toLowerCase().includes('brasil') && !cleanAddress.toLowerCase().includes('br')) {
+                    cleanAddress += ', Brasil';
+                }
+                
+                console.log('🔍 Endereço formatado:', cleanAddress);
+                
+                // Primeiro, verificar se é uma cidade conhecida e usar coordenadas aproximadas
+                const cityCoords = {
+                    'São Lourenço da Mata': [-8.0024, -35.0183],
+                    'Recife': [-8.0476, -34.8770],
+                    'Olinda': [-8.0089, -34.8554],
+                    'Jaboatão dos Guararapes': [-8.1128, -35.0147],
+                    'Paulista': [-7.9408, -34.8731],
+                    'Camaragibe': [-8.0231, -34.9781],
+                    'Abreu e Lima': [-7.9111, -34.9028],
+                    'Igarassu': [-7.8341, -34.9064],
+                    'Itapissuma': [-7.7764, -34.8922],
+                    'Goiana': [-7.5606, -35.0025]
+                };
+                
+                // Procurar por coordenadas da cidade no endereço
+                for (const [city, coords] of Object.entries(cityCoords)) {
+                    if (cleanAddress.toLowerCase().includes(city.toLowerCase())) {
+                        console.log(`✅ Usando coordenadas aproximadas de ${city}:`, coords);
+                        return coords;
+                    }
+                }
+                
+                // Se não encontrou cidade específica, tentar com Nominatim
+                console.log('🔄 Tentando com Nominatim...');
+                
+                // Tentar diferentes variações do endereço
+                const searchVariations = [
+                    cleanAddress,
+                    cleanAddress.replace(/,\s*/, ', '), // Garantir espaços corretos
+                    cleanAddress.replace(/\s*-\s*/, ' - '), // Garantir espaços no hífen
+                    cleanAddress.replace(/,\s*Brasil$/, ', PE, Brasil'), // Adicionar estado
+                    cleanAddress.replace(/,\s*Brasil$/, ', Pernambuco, Brasil'), // Nome completo do estado
+                ];
+                
+                // Se o endereço tem cidade, tentar apenas com cidade e estado
+                const addressParts = cleanAddress.split(',');
+                if (addressParts.length > 2) {
+                    const cityState = addressParts.slice(-2).join(',').trim();
+                    searchVariations.push(cityState + ', Brasil');
+                    searchVariations.push(cityState + ', PE, Brasil');
+                    searchVariations.push(cityState + ', Pernambuco, Brasil');
+                }
+                
+                console.log('🔍 Variações de busca:', searchVariations);
+                
+                // Tentar cada variação
+                for (let i = 0; i < searchVariations.length; i++) {
+                    const searchQuery = searchVariations[i];
+                    console.log(`🔍 Tentativa ${i + 1}:`, searchQuery);
+                    
+                    try {
+                        const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}&limit=1&countrycodes=br`);
+                        const data = await response.json();
+                        console.log(`📨 Resposta Nominatim (tentativa ${i + 1}):`, data);
+                        
+                        if (data && data.length > 0) {
+                            const coords = [parseFloat(data[0].lat), parseFloat(data[0].lon)];
+                            
+                            // Verificar se as coordenadas estão no Brasil (latitude entre -34 e 6, longitude entre -74 e -34)
+                            if (coords[0] >= -34 && coords[0] <= 6 && coords[1] >= -74 && coords[1] <= -34) {
+                                console.log('✅ Coordenadas encontradas (Brasil):', coords);
+                                return coords;
+                            } else {
+                                console.log('❌ Coordenadas fora do Brasil:', coords);
+                                continue;
+                            }
+                        }
+                    } catch (error) {
+                        console.log(`❌ Erro na tentativa ${i + 1}:`, error);
+                        continue;
+                    }
+                }
+                
+                // Se não encontrou, usar coordenadas de Recife como fallback
+                console.log('🔄 Usando coordenadas de Recife como fallback');
+                return [-8.0476, -34.8770];
+                
+            } catch (error) {
+                console.error('💥 Erro ao geocodificar:', error);
+                // Em caso de erro, retornar coordenadas de Recife
+                return [-8.0476, -34.8770];
+            }
+        }
+        
+        // Função para calcular rota
+        async function calculateRoute(destinoCoords) {
+            try {
+                // Coordenadas da empresa (Recife)
+                const origem = [-8.0476, -34.8770]; // [lat, lng]
+                // OSRM espera: longitude,latitude
+                const url = `https://router.project-osrm.org/route/v1/driving/${origem[1]},${origem[0]};${destinoCoords[1]},${destinoCoords[0]}?overview=full&geometries=geojson`;
+                console.log('URL da rota:', url);
+
+                const response = await fetch(url);
+                const data = await response.json();
+                console.log('Resposta OSRM:', data);
+
+                if (data.routes && data.routes.length > 0) {
+                    const route = data.routes[0];
+                    // Remover rota anterior
+                    if (routeLayer) {
+                        map.removeLayer(routeLayer);
+                    }
+                    // Adicionar nova rota
+                    routeLayer = L.geoJSON(route.geometry, {
+                        style: {
+                            color: '#007bff',
+                            weight: 4,
+                            opacity: 0.7
+                        }
+                    }).addTo(map);
+                    // Ajustar view para mostrar toda a rota
+                    map.fitBounds(routeLayer.getBounds());
+                    // Mostrar informações da rota
+                    const distancia = (route.distance / 1000).toFixed(1);
+                    const duracao = Math.round(route.duration / 60);
+                    const routeDetails = document.getElementById('route-details');
+                    const routeInfo = document.getElementById('route-info');
+                    if (routeDetails && routeInfo) {
+                        routeDetails.innerHTML = `
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <strong>Distância:</strong> ${distancia} km
+                                </div>
+                                <div class="col-md-6">
+                                    <strong>Tempo estimado:</strong> ${duracao} minutos
+                                </div>
+                            </div>
+                        `;
+                        routeInfo.style.display = 'block';
+                        console.log('✅ Informações da rota exibidas!');
+                    } else {
+                        console.log('❌ Elementos de rota não encontrados');
+                    }
+                } else {
+                    alert('Não foi possível traçar a rota entre os pontos. Verifique se o endereço está correto e se ambos os pontos estão no Brasil.');
+                    console.log('❌ Nenhuma rota encontrada pelo OSRM.');
+                }
+            } catch (error) {
+                alert('Erro ao calcular rota: ' + error.message);
+                console.error('💥 Erro ao calcular rota:', error);
+            }
+        }
+        
+        // Função para calcular horário de retorno (8 horas depois)
+        function calcularHorarioRetorno(horaSaida) {
+            console.log('⏰ Calculando horário de retorno para:', horaSaida);
+            if (!horaSaida) {
+                console.log('❌ Hora de saída não fornecida');
+                return;
+            }
+            
+            const [hora, minuto] = horaSaida.split(':').map(Number);
+            console.log('📊 Hora:', hora, 'Minuto:', minuto);
+            
+            // Calcular 8 horas depois
+            let novaHora = hora + 8;
+            let novaMinuto = minuto;
+            
+            // Ajustar se passar de 24 horas
+            if (novaHora >= 24) {
+                novaHora = novaHora - 24;
+            }
+            
+            const horaRetorno = novaHora.toString().padStart(2, '0');
+            const minutoRetorno = novaMinuto.toString().padStart(2, '0');
+            const horarioCompleto = `${horaRetorno}:${minutoRetorno}`;
+            
+            console.log('✅ Horário de retorno calculado:', horarioCompleto);
+            
+            if (horaRetornoField) {
+                horaRetornoField.value = horarioCompleto;
+                console.log('✅ Campo de retorno atualizado!');
+            } else {
+                console.log('❌ Campo de retorno não encontrado');
+            }
+        }
+        
+        // Função para processar endereço e calcular rota
+        async function processarEndereco(endereco) {
+            if (!endereco.trim()) {
+                console.log('❌ Endereço vazio');
+                return;
+            }
+            
+            console.log('🔄 Processando endereço:', endereco);
+            
+            // Remover marcador anterior
+            if (destinoMarker) {
+                map.removeLayer(destinoMarker);
+            }
+            
+            // Geocodificar endereço
+            const coords = await geocodeAddress(endereco);
+            
+            if (coords) {
+                // Adicionar marcador de destino
+                destinoMarker = L.marker(coords).addTo(map);
+                destinoMarker.bindPopup('<strong>Destino</strong><br>' + endereco).openPopup();
+                console.log('✅ Marcador de destino adicionado');
+                
+                // Calcular rota
+                await calculateRoute(coords);
+                
+                // Mostrar mensagem de sucesso se usou coordenadas aproximadas
+                if (endereco.toLowerCase().includes('são lourenço da mata')) {
+                    console.log('ℹ️ Usando coordenadas aproximadas de São Lourenço da Mata');
+                }
+            } else {
+                console.log('❌ Endereço não encontrado:', endereco);
+                alert('Não foi possível encontrar o endereço. Verifique se está correto.');
+            }
+        }
+        
+        // Event listener para mudança no CEP
+        if (cepField) {
+            console.log('🔗 Configurando evento para CEP');
+            cepField.addEventListener('blur', async function() {
+                const cep = this.value.trim();
+                console.log('📝 CEP digitado:', cep);
+                
+                if (cep) {
+                    const endereco = await buscarCep(cep);
+                    
+                    if (endereco) {
+                        if (enderecoField) {
+                            enderecoField.value = endereco;
+                            console.log('✅ Endereço preenchido automaticamente');
+                        }
+                        await processarEndereco(endereco);
+                    } else {
+                        alert('CEP não encontrado. Verifique se está correto.');
+                    }
+                }
+            });
+            
+            // Máscara para CEP
+            cepField.addEventListener('input', function() {
+                let value = this.value.replace(/\D/g, '');
+                console.log('🔢 CEP digitado (apenas números):', value);
+                
+                if (value.length > 5) {
+                    value = value.substring(0, 5) + '-' + value.substring(5, 8);
+                }
+                
+                console.log('🔢 CEP formatado:', value);
+                this.value = value;
+            });
+        }
+        
+        // Event listener para mudança no campo de endereço
+        if (enderecoField) {
+            console.log('🔗 Configurando evento para endereço');
+            enderecoField.addEventListener('blur', async function() {
+                const endereco = this.value.trim();
+                console.log('📝 Endereço digitado:', endereco);
+                if (endereco) {
+                    await processarEndereco(endereco);
+                }
+            });
+        }
+        
+        // Event listener para mudança no horário de saída
+        if (horaSaidaField) {
+            console.log('🔗 Configurando evento para hora de saída');
+            horaSaidaField.addEventListener('change', function() {
+                console.log('⏰ Horário de saída selecionado:', this.value);
+                calcularHorarioRetorno(this.value);
+            });
+        }
+        
+        // Atualizar horários disponíveis conforme a data escolhida
+        const dataField = document.getElementById('id_data_realizacao') || document.getElementById('data_realizacao');
+
+        if (dataField && horaSaidaField) {
+            dataField.addEventListener('change', async function() {
+                const data = this.value;
+                if (!data) return;
+                // Buscar horários livres via AJAX
+                try {
+                    const response = await fetch(`/solicitacoes/horarios-livres/?data=${data}`);
+                    const result = await response.json();
+                    const horarios = result.horarios || [];
+                    // Limpar opções atuais
+                    horaSaidaField.innerHTML = '<option value="">Selecione um horário</option>';
+                    // Adicionar horários livres
+                    horarios.forEach(horario => {
+                        const opt = document.createElement('option');
+                        opt.value = horario;
+                        opt.textContent = horario;
+                        horaSaidaField.appendChild(opt);
+                    });
+                } catch (e) {
+                    console.error('Erro ao buscar horários livres:', e);
+                }
+            });
+        }
+        
+        console.log('✅ Todos os event listeners configurados!');
+        console.log('=== SISTEMA PRONTO PARA USO ===');
+    });
+</script>
+{% endblock %}

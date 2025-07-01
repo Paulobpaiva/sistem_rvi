@@ -1,0 +1,22 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Excluir Veículo{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h2>Excluir Veículo</h2>
+    </div>
+    <div class="card-body">
+        <p>Você tem certeza que deseja excluir o veículo "{{ veiculo.placa }}"?</p>
+        <form method="post">
+            {% csrf_token %}
+            <div class="d-flex justify-content-end">
+                <a href="{% url 'veiculos:list' %}" class="btn btn-secondary me-2">Cancelar</a>
+                <button type="submit" class="btn btn-danger">Excluir</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

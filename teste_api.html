@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teste API Nominatim</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input, button {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background: #f9f9f9;
+            white-space: pre-wrap;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .error {
+            background: #f8d7da;
+            border-color: #f5c6cb;
+            color: #721c24;
+        }
+        .success {
+            background: #d4edda;
+            border-color: #c3e6cb;
+            color: #155724;
+        }
+    </style>
+</head>
+<body>
+    <h1>Teste da API Nominatim</h1>
+    
+    <div class="form-group">
+        <label for="endereco">Endereço para testar:</label>
+        <input type="text" id="endereco" placeholder="Ex: Rua das Flores, 123, Recife, PE" value="Rua das Flores, 123, Recife, PE">
+    </div>
+    
+    <button onclick="testarAPI()">Testar API</button>
+    
+    <div id="resultado" class="result" style="display: none;"></div>
+
+    <script>
+        async function testarAPI() {
+            const endereco = document.getElementById('endereco').value;
+            const resultado = document.getElementById('resultado');
+            
+            if (!endereco.trim()) {
+                resultado.innerHTML = 'Erro: Digite um endereço para testar.';
+                resultado.className = 'result error';
+                resultado.style.display = 'block';
+                return;
+            }
+            
+            resultado.innerHTML = 'Testando... Aguarde...';
+            resultado.className = 'result';
+            resultado.style.display = 'block';
+            
+            try {
+                // Limpar e formatar o endereço
+                let cleanAddress = endereco.trim();
+                
+                // Adicionar contexto brasileiro se não estiver presente
+                if (!cleanAddress.toLowerCase().includes('brasil') && !cleanAddress.toLowerCase().includes('br')) {
+                    cleanAddress += ', Brasil';
+                }
+                
+                console.log('Endereço formatado:', cleanAddress);
+                
+                // Fazer requisição para Nominatim
+                const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(cleanAddress)}&limit=1`;
+                console.log('URL:', url);
+                
+                const response = await fetch(url);
+                const data = await response.json();
+                
+                console.log('Resposta completa:', data);
+                
+                if (data && data.length > 0) {
+                    const coords = [parseFloat(data[0].lat), parseFloat(data[0].lon)];
+                    resultado.innerHTML = `
+SUCESSO!
+
+Endereço: ${endereco}
+Endereço formatado: ${cleanAddress}
+URL da requisição: ${url}
+
+Resposta da API:
+${JSON.stringify(data, null, 2)}
+
+Coordenadas encontradas:
+- Latitude: ${coords[0]}
+- Longitude: ${coords[1]}
+- Coordenadas: [${coords[0]}, ${coords[1]}]
+                    `;
+                    resultado.className = 'result success';
+                } else {
+                    resultado.innerHTML = `
+FALHA!
+
+Endereço: ${endereco}
+Endereço formatado: ${cleanAddress}
+URL da requisição: ${url}
+
+Resposta da API:
+${JSON.stringify(data, null, 2)}
+
+Nenhuma coordenada encontrada para este endereço.
+                    `;
+                    resultado.className = 'result error';
+                }
+            } catch (error) {
+                resultado.innerHTML = `
+ERRO!
+
+Endereço: ${endereco}
+
+Erro: ${error.message}
+
+Stack trace: ${error.stack}
+                `;
+                resultado.className = 'result error';
+            }
+        }
+        
+        // Permitir testar com Enter
+        document.getElementById('endereco').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                testarAPI();
+            }
+        });
+        
+        // Testar automaticamente ao carregar
+        window.addEventListener('load', function() {
+            setTimeout(testarAPI, 1000);
+        });
+    </script>
+</body>
+</html> 
